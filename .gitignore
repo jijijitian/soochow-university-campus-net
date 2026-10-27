@@ -1,0 +1,37 @@
+# ---- 隐私与运行产物 ----
+# 真实账号密码，绝不入库
+config.ini
+*.ini
+!config.example.ini
+
+# 本机令牌等机密
+.secrets/
+*.token
+*.dpapi
+
+# 运行状态 / 日志
+logs/
+status.json
+auto_login.pid
+stop.request
+
+# 测试与临时文件
+_demo.ini
+_*.py
+_*.txt
+_tmp*
+.tmp/
+
+# ---- Python ----
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+
+# ---- 编辑器 / 系统 ----
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+desktop.ini
