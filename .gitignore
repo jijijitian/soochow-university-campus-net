@@ -19,6 +19,7 @@ stop.request
 _demo.ini
 _*.py
 _*.txt
+_*.bat
 _tmp*
 .tmp/
 
