@@ -1,0 +1,17 @@
+# 统一换行符，避免 Windows 上出现 CRLF 混乱
+* text=auto eol=lf
+
+# 二进制文件不做换行转换
+*.png binary
+*.jpg binary
+*.ico binary
+*.zip binary
+*.exe binary
+*.dll binary
+
+# 批处理脚本保持 CRLF，否则 cmd 解析可能出问题
+*.bat text eol=crlf
+*.vbs text eol=crlf
+
+# 配置文件保持 CRLF（Windows 记事本友好）
+*.ini text eol=crlf
