@@ -1,34 +1,37 @@
 ' ============================================================
-'  Campus network auto-login - GUI launcher
-'  Double-click this file to open the app (no console window).
+'  校园网自动登录 - 启动器
+'  优先启动同目录 exe，否则用源码运行（不弹黑窗口）
 ' ============================================================
 Option Explicit
 
-Dim fso, shell, scriptDir, guiFile, pywCmd
+Dim fso, shell, dir, exePath, appPy
 
 Set fso = CreateObject("Scripting.FileSystemObject")
 Set shell = CreateObject("WScript.Shell")
 
-scriptDir = fso.GetParentFolderName(WScript.ScriptFullName)
-guiFile = scriptDir & "\gui.py"
+dir = fso.GetParentFolderName(WScript.ScriptFullName)
+exePath = dir & "\校园网自动登录.exe"
+appPy = dir & "\app.py"
 
-If Not fso.FileExists(guiFile) Then
-    MsgBox "Cannot find gui.py in:" & vbCrLf & scriptDir, 16, "Campus Auto Login"
+shell.CurrentDirectory = dir
+
+If fso.FileExists(exePath) Then
+    shell.Run """" & exePath & """", 1, False
+    WScript.Quit 0
+End If
+
+If Not fso.FileExists(appPy) Then
+    MsgBox "找不到 校园网自动登录.exe 或 app.py：" & vbCrLf & dir, 16, "校园网自动登录"
     WScript.Quit 1
 End If
 
-shell.CurrentDirectory = scriptDir
-
 On Error Resume Next
-pywCmd = """pythonw.exe"" """ & guiFile & """"
-shell.Run pywCmd, 1, False
+shell.Run """pythonw.exe"" """ & appPy & """", 1, False
 If Err.Number <> 0 Then
     Err.Clear
-    ' pythonw not in PATH, try python
-    shell.Run """python.exe"" """ & guiFile & """", 1, False
+    shell.Run """python.exe"" """ & appPy & """", 1, False
     If Err.Number <> 0 Then
-        MsgBox "Python not found." & vbCrLf & vbCrLf & _
-               "Please install Python 3 and make sure it is in PATH.", 16, "Campus Auto Login"
+        MsgBox "未找到 Python，请安装 Python 3 或直接双击 exe。", 16, "校园网自动登录"
         WScript.Quit 1
     End If
 End If

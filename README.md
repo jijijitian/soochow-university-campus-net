@@ -1,67 +1,83 @@
 # 校园网自动登录
 
-[![Platform](https://img.shields.io/badge/platform-Windows-0078D4)](https://www.microsoft.com/windows)
+[![Platform](https://img.shields.io/badge/platform-Windows%2010%2F11-0078D4)](https://www.microsoft.com/windows)
+[![Release](https://img.shields.io/badge/release-v1.0.0-2563EB)](../../releases)
 [![Python](https://img.shields.io/badge/python-3.9%2B-3776AB)](https://www.python.org/)
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
-[![Status](https://img.shields.io/badge/status-beta-orange)](CHANGELOG.md)
 
 针对**苏州大学**校园网认证门户 `10.9.1.3`（Dr.COM / 城市热点 ePortal）的掉线自动重连工具。
 
 定时探测本机能否访问公网；一旦发现掉线（例如账号在别的设备上登录把本机顶下线），
 自动用配置好的账号密码重新登录门户，并把过程完整写进日志。
 
-**零依赖**：只用 Python 3 标准库，图形界面基于 tkinter，不需要 `pip install` 任何东西。
+**提供免安装 exe**，双击即用，不需要安装 Python。
 
-![界面截图](docs/screenshot.png)
+![界面截图](docs/screenshot-light.png)
+
+---
+
+## 下载使用
+
+到 [Releases](../../releases) 页面下载 `campus-autologin-v1.0.0-win64.zip`，然后：
+
+1. 解压到任意位置（**要解压整个文件夹，不能只拿 exe**）
+2. 双击 `校园网自动登录.exe`
+3. 填写账号、密码，选择运营商，设置检测间隔
+4. 点「保存并启动」
+
+需要开机自启，就在界面上打开「开机自动启动」开关，一个开关搞定，不需要管理员权限。
+
+> 程序会在 exe 旁边生成 `config.ini`（配置）、`status.json`（状态）和 `logs/`（日志）。
+> 卸载时先关闭开机自启，再删除整个文件夹即可。
 
 ---
 
 ## 特性
 
 - **自动重连** — 检测到公网不通时自动登录，正常在线时绝不打扰已有连接
-- **图形界面** — 账号、密码、运营商、检测间隔全部可视化配置
-- **开机自启** — 勾选即生效，当前用户级别，不需要管理员权限，无黑窗口
-- **实时状态** — 运行状态、最近检测结果、本机 IP / MAC、下次检测倒计时
-- **防误判** — 连续两轮探测全失败才判定掉线，并识别「被劫持到登录页」的情况
+- **现代界面** — 侧栏导航 + 卡片布局，深浅双主题，自绘控件无第三方 UI 库
+- **程序内开机自启** — 开关式设置，当前用户级别，不需要管理员权限，静默无窗口
+- **实时状态** — 状态环、本机 IP / MAC、检测次数、下次检测倒计时，1.5 秒刷新
+- **账号预览** — 直接显示最终提交的完整账号（含 `,0,` 前缀与运营商后缀）
+- **防误判** — 连续两轮探测全失败才判定掉线，并识别「被劫持到登录页」
 - **失败退避** — 登录失败按 30s → 60s → 120s 指数退避，避免密码错误把账号刷到被锁
 - **单实例保护** — 避免多个实例同时登录，把账号反复顶下线
+- **零依赖** — 源码模式同样只需 Python 3 标准库
 
 ---
 
-## 快速开始
+## 界面
 
-### 1. 打开界面
-
-双击 **`启动校园网自动登录.vbs`**。
-
-### 2. 填写配置
-
-| 项目 | 说明 |
+| 浅色 | 深色 |
 |---|---|
-| 账号 | 统一身份认证用户名（学号 / 工号） |
-| 密码 | 校园网密码 |
-| 运营商 | 校园网 / 中国联通 `@cucc` / 中国电信 `@ctc` / 中国移动 `@zgyd` |
-| 检测间隔 | 任意秒数，最小 30 秒，默认 300 秒（5 分钟） |
+| ![浅色](docs/screenshot-light.png) | ![深色](docs/screenshot-dark.png) |
 
-点「保存并启动」即可。想随 Windows 自动运行，就在下面勾上「开机自动启动」。
+账号设置页：
 
-### 3. 验证
-
-点「立即检测」确认探测逻辑正常；想立刻试一次登录，点「立即登录」。
+![账号设置](docs/screenshot-account.png)
 
 ---
 
-## 命令行用法
+## 从源码运行
 
-不想开界面时，脚本本身也能直接用：
+不下载 exe 也可以直接用源码跑，只需要 Python 3.9+：
 
 ```bat
-python auto_login.py                 :: 前台常驻，每 5 分钟一轮
-python auto_login.py --once          :: 只跑一轮后退出
-python auto_login.py --check         :: 只检测当前网络状态，不登录
-python auto_login.py --force-login   :: 跳过检测，直接尝试登录
-python auto_login.py -v              :: 输出详细探测过程
-python auto_login.py -c 其他配置.ini  :: 指定其他配置文件
+python app.py                 :: 打开图形界面
+python auto_login.py --check  :: 只检测网络状态
+```
+
+两种方式等价，`app.py` 是统一入口：无参数开界面，带参数走命令行。
+
+### 命令行参数
+
+```bat
+python app.py --check         :: 只检测当前网络状态，不登录
+python app.py --once          :: 只跑一轮后退出
+python app.py --force-login   :: 跳过检测直接登录（调试/救急）
+python app.py --daemon        :: 静默后台守护（开机自启使用）
+python app.py -v              :: 输出详细探测过程
+python app.py -c 其他配置.ini  :: 指定其他配置文件
 ```
 
 退出码：`0` 成功 / `1` 失败 / `2` 没填账号密码 / `3` 已有实例在运行。
@@ -115,17 +131,17 @@ GET http://10.9.1.3:801/eportal/?c=Portal&a=login
 
 ## 开机自启是怎么实现的
 
-勾选后写入当前用户注册表：
+界面上的开关会写入当前用户注册表：
 
 ```
 HKCU\Software\Microsoft\Windows\CurrentVersion\Run
-  CampusAutoLogin = "pythonw.exe" "…\auto_login.py"
+  CampusAutoLogin = "…\校园网自动登录.exe" --daemon
 ```
 
 - 当前用户级别，**不需要管理员权限**
-- 用 `pythonw.exe` 启动，**不弹控制台窗口**
+- 带 `--daemon` 参数启动，只跑后台守护，**不弹窗口**
 - 注册表写不进去时，自动退回「启动」文件夹方案（放一个 VBS 启动器）
-- 取消勾选会同时清理两条路径
+- 关闭开关会同时清理两条路径
 
 ---
 
@@ -133,35 +149,34 @@ HKCU\Software\Microsoft\Windows\CurrentVersion\Run
 
 | 文件 | 作用 |
 |---|---|
-| `启动校园网自动登录.vbs` | 双击打开图形界面（无控制台窗口） |
-| `gui.py` | 图形界面 |
+| `app.py` | 统一入口：无参数开界面，带参数走命令行 |
+| `gui.py` | 图形界面（自绘控件、双主题） |
 | `auto_login.py` | 核心逻辑：检测、登录、守护进程、开机自启 |
+| `build.spec` / `build_onedir.spec` | PyInstaller 打包配置 |
 | `config.example.ini` | 配置模板 |
-| `run.bat` | 命令行前台运行 |
-| `docs/screenshot.png` | 界面截图 |
+| `assets/app.ico` | 程序图标 |
 
-运行时会自动生成 `config.ini`（配置）、`status.json`（实时状态）、
-`auto_login.pid`（防重复启动）、`logs/auto_login.log`（日志），这些都不进仓库。
+运行时产物：`config.ini`、`status.json`、`ui_state.json`、`auto_login.pid`、`logs/auto_login.log`
+（均已 `.gitignore`）。
 
 ---
 
 ## 日志
 
-`logs/auto_login.log`，单文件 1 MB、保留 3 份自动轮转。
+`logs/auto_login.log`，单文件 1 MB、保留 3 份自动轮转。界面日志页会按级别着色：
 
 ```
-2026-10-27 21:31:34 [INFO   ] 自动登录守护已启动，检测周期 300 秒，门户 http://10.9.1.3:801
-2026-10-27 21:31:36 [WARNING] 检测到公网不可用：http://connect.rom.miui.com/generate_204 无响应
-2026-10-27 21:31:37 [INFO   ] 向门户提交登录：账号=,0,20260000000@cucc，本机 IP=192.0.2.10，MAC=aabbccddeeff
-2026-10-27 21:31:38 [INFO   ] 登录成功；开始校验网络……
-2026-10-27 21:31:40 [INFO   ] 登录后校验通过：http://connect.rom.miui.com/generate_204 正常
+2026-10-28 09:31:34 [INFO   ] 自动登录守护已启动，检测周期 300 秒，门户 http://10.9.1.3:801
+2026-10-28 09:31:36 [WARNING] 检测到公网不可用：http://connect.rom.miui.com/generate_204 无响应
+2026-10-28 09:31:37 [INFO   ] 向门户提交登录：账号=,0,20260000000@cucc，本机 IP=192.0.2.10，MAC=aabbccddeeff
+2026-10-28 09:31:40 [INFO   ] 登录后校验通过：http://connect.rom.miui.com/generate_204 正常
 ```
 
 ---
 
 ## 注意事项
 
-- **密码是明文保存在 `config.ini` 里的**，请勿把配置文件和程序一起发给别人。
+- **密码以明文保存在 `config.ini`**，请勿把配置文件和程序一起发给别人。
   `config.ini` 已被 `.gitignore` 排除。
 - 账号若绑定 MAC，换网卡后需要把 `[account]` 里的 `mac` 改成新网卡地址。
 - 脚本只在「检测到公网不通」时才登录，**不会主动踢掉正常的连接**。

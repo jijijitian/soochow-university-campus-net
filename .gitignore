@@ -12,14 +12,20 @@ config.ini
 # 运行状态 / 日志
 logs/
 status.json
+ui_state.json
 auto_login.pid
 stop.request
+startup-error.log
+
+# 打包中间产物
+.build/
 
 # 测试与临时文件
-_demo.ini
 _*.py
 _*.txt
 _*.bat
+_*.log
+_*.ini
 _tmp*
 .tmp/
 

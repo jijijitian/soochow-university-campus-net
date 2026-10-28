@@ -43,11 +43,65 @@ import urllib.parse
 import urllib.request
 from pathlib import Path
 
-APP_DIR = Path(__file__).resolve().parent
+APP_NAME = "校园网自动登录"
+APP_VERSION = "1.0.0"
+
+
+def is_frozen() -> bool:
+    """是否运行在 PyInstaller 打包的 exe 里。"""
+    return bool(getattr(sys, "frozen", False))
+
+
+def _exe_dir() -> Path:
+    """exe 所在目录；未打包时是脚本目录。"""
+    if is_frozen():
+        return Path(sys.executable).resolve().parent
+    return Path(__file__).resolve().parent
+
+
+def _ensure_dir(path: Path) -> bool:
+    try:
+        path.mkdir(parents=True, exist_ok=True)
+        probe = path / ".write-test"
+        probe.write_text("x", encoding="ascii")
+        probe.unlink(missing_ok=True)
+        return True
+    except Exception:
+        return False
+
+
+def _resolve_data_dir() -> Path:
+    """配置与日志的落地目录。
+
+    优先放在 exe 旁边（绿色版习惯）；不可写时依次退回
+    %LOCALAPPDATA%\\SoochowCampusNet、用户主目录，保证总有可写位置。
+    """
+    base = _exe_dir()
+    if _ensure_dir(base):
+        return base
+
+    candidates: list[Path] = []
+    local = os.environ.get("LOCALAPPDATA")
+    if local:
+        candidates.append(Path(local) / "SoochowCampusNet")
+    appdata = os.environ.get("APPDATA")
+    if appdata:
+        candidates.append(Path(appdata) / "SoochowCampusNet")
+    candidates.append(Path.home() / ".campus-net")
+    candidates.append(Path(os.environ.get("TEMP", ".")) / "SoochowCampusNet")
+
+    for cand in candidates:
+        if _ensure_dir(cand):
+            return cand
+    return base
+
+
+APP_DIR = _resolve_data_dir()
 DEFAULT_CONFIG = APP_DIR / "config.ini"
 PID_FILE = APP_DIR / "auto_login.pid"
 STATE_FILE = APP_DIR / "status.json"
 STOP_FILE = APP_DIR / "stop.request"
+LOG_FILE = APP_DIR / "logs" / "auto_login.log"
 
 USER_AGENT = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
@@ -944,9 +998,10 @@ def start_daemon(config_path: Path | None = None) -> tuple[bool, str]:
     """在后台启动守护进程，返回 (是否成功, 说明)。"""
     if running_pid() is not None:
         return True, "守护进程已在运行"
-    cmd = [pythonw_path(), str(APP_DIR / "auto_login.py")]
+    args = ["--daemon"]
     if config_path is not None:
-        cmd += ["-c", str(config_path)]
+        args += ["-c", str(config_path)]
+    cmd = app_command(args)
     clear_stop_request()
     try:
         subprocess.Popen(
@@ -1134,9 +1189,23 @@ def _startup_script_path() -> Path:
     return _startup_dir() / AUTOSTART_STARTUP_LINK
 
 
+def app_command(args: list[str] | None = None) -> list[str]:
+    """拉起本程序的命令行。
+
+    打包后直接调用 exe 自身；未打包时用 pythonw.exe 跑 auto_login.py。
+    打包后的 exe 是窗口程序，不会再弹控制台。
+    """
+    if is_frozen():
+        cmd = [str(Path(sys.executable).resolve())]
+    else:
+        cmd = [pythonw_path(), str(Path(__file__).resolve())]
+    return cmd + list(args or [])
+
+
 def autostart_target() -> str:
-    """开机自启实际执行的命令行。"""
-    return f'"{pythonw_path()}" "{APP_DIR / "auto_login.py"}"'
+    """开机自启实际执行的命令行：直接以 --daemon 模式静默启动。"""
+    cmd = app_command(["--daemon"])
+    return subprocess.list2cmdline(cmd)
 
 
 def autostart_enabled() -> bool:
@@ -1262,13 +1331,20 @@ def setup_console_encoding() -> None:
 
 def main(argv: list[str] | None = None) -> int:
     setup_console_encoding()
-    parser = argparse.ArgumentParser(description="校园网自动登录守护脚本")
+    parser = argparse.ArgumentParser(description="校园网自动登录")
     parser.add_argument("-c", "--config", default=str(DEFAULT_CONFIG), help="配置文件路径")
     parser.add_argument("--once", action="store_true", help="只执行一轮后退出")
     parser.add_argument("--check", action="store_true", help="只检测网络状态，不做登录")
     parser.add_argument("--force-login", action="store_true", help="跳过检测，直接尝试登录")
+    parser.add_argument("--daemon", action="store_true", help="静默后台守护（开机自启使用）")
     parser.add_argument("-v", "--verbose", action="store_true", help="输出调试信息")
     args = parser.parse_args(argv)
+
+    # 打包成窗口程序后 stdout/stderr 为 None，任何 print 都会炸，这里兜底
+    if sys.stdout is None:
+        sys.stdout = open(os.devnull, "w", encoding="utf-8")
+    if sys.stderr is None:
+        sys.stderr = open(os.devnull, "w", encoding="utf-8")
 
     cfg = load_config(Path(args.config))
     setup_logging(cfg, args.verbose)
@@ -1279,7 +1355,7 @@ def main(argv: list[str] | None = None) -> int:
         return 0 if online else 1
 
     if not cfg.username or not cfg.password:
-        message = f"请先在配置文件中填写账号和密码：{args.config}"
+        message = f"请先填写账号和密码：{args.config}"
         log.error(message)
         print(message, file=sys.stderr)
         return 2
@@ -1289,9 +1365,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.once or args.force_login:
         daemon.standalone = True
         ok = daemon.run_once()
-        if not ok:
-            return 1
-        return 0
+        return 0 if ok else 1
 
     if another_instance_running():
         message = "已有一个自动登录进程在运行（见 auto_login.pid），本次退出"
