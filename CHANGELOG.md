@@ -1,5 +1,48 @@
 # 更新记录
 
+## v1.0.5 — 修复全新解压无法启动（2026-10-28）
+
+修复「新电脑上解压后双击没有任何反应」的根因问题。
+
+### 根因
+
+发布包里从来没有 `config.ini`（只有 `config.example.ini`），而启动路径上
+`load_config()` 遇到文件不存在时会 `raise SystemExit(...)`。
+
+`SystemExit` 继承自 `BaseException`，不是 `Exception`，因此：
+
+- `gui.main()` 的 `except Exception` 接不住它
+- 它一路穿透到解释器，被当成"正常退出请求"，返回码 1
+- **无窗口、无日志、无弹窗，0.7 秒静默退出**
+
+开发者机器上目录里留着历史运行产生的 `config.ini`，所以永远踩不到；
+任何一台全新解压的机器都必然触发。
+
+### 修复
+
+| 改动 | 说明 |
+|---|---|
+| `load_config` | 文件缺失时**自动创建**（优先复制 `config.example.ini`，没有模板则写内置默认值），不再抛 `SystemExit` |
+| 异常类型 | 真正无法读取时抛 `ConfigMissingError` / `ConfigUnreadableError`，可被正常捕获 |
+| `gui.main()` | 捕获改为 `BaseException`，任何异常都**弹原生 MessageBox + 写日志**，杜绝静默退出 |
+| `app.py` | 单独处理 `SystemExit`，界面模式下主动退出也会提示原因 |
+| `收集信息.ps1` | 增加 `config.ini` 存在性与账号填写状态检查；修正 MOTW 统计口径 |
+| 打包 | GUI 子系统（`Subsystem=2`），双击无黑色控制台 |
+
+### 验证
+
+全新目录、无 `config.ini`、甚至无 `config.example.ini`：
+
+```
+进程存活: True
+主窗口: 出现 1.03s
+可见窗口类: ['TkTopLevel']
+有控制台黑框: False
+config.ini 自动生成: True (1125 bytes 内置默认 / 1924 bytes 从模板复制)
+```
+
+---
+
 ## v1.0.3 — 修复启动卡死（2026-10-28）
 
 修复双击后窗口长时间不出来、看起来像卡死的问题。

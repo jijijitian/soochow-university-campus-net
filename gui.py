@@ -1438,6 +1438,28 @@ class App(tk.Tk):
         self.destroy()
 
 
+def _report_startup_failure(title: str, detail: str) -> None:
+    """启动失败时的统一兜底：写日志 + 弹原生对话框。
+
+    用 ctypes 调 MessageBox 而不是 tkinter，因为界面可能根本没建起来。
+    """
+    try:
+        core.log.error("%s\n%s", title, detail)
+    except Exception:
+        pass
+    try:
+        import ctypes
+
+        ctypes.windll.user32.MessageBoxW(
+            None, f"{title}\n\n{detail}", "校园网自动登录 - 启动失败", 0x10
+        )
+    except Exception:
+        try:
+            messagebox.showerror(APP_TITLE, f"{title}\n\n{detail}")
+        except Exception:
+            pass
+
+
 def main() -> int:
     # 界面自身也要写日志，否则手动检测 / 登录在黑窗用户那里看不到任何记录
     try:
@@ -1445,26 +1467,30 @@ def main() -> int:
         core.setup_logging(_cfg, verbose=False)
         core.log.info("图形界面已启动（%s）", core.APP_DIR)
     except Exception:
+        # 日志初始化失败不能挡住界面
         pass
 
     try:
         app = App()
-    except Exception as exc:
+    except BaseException:
+        # 注意用 BaseException：SystemExit / KeyboardInterrupt 也要接住，
+        # 否则进程会静默退出，用户看到的就是"双击没反应"
         import traceback
 
-        traceback.print_exc()
-        try:
-            core.log.exception("界面启动失败")
-        except Exception:
-            pass
-        try:
-            messagebox.showerror(APP_TITLE, f"界面启动失败：{exc}")
-        except Exception:
-            pass
+        detail = traceback.format_exc()
+        _report_startup_failure(
+            "界面初始化失败",
+            detail[-1200:] + "\n\n详细信息见 logs\\auto_login.log",
+        )
         return 1
 
     try:
         app.mainloop()
+    except BaseException:
+        import traceback
+
+        _report_startup_failure("界面运行出错", traceback.format_exc()[-1200:])
+        return 1
     finally:
         try:
             core.log.info("图形界面已关闭")

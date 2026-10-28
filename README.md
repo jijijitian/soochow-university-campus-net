@@ -1,7 +1,7 @@
 # 校园网自动登录
 
 [![Platform](https://img.shields.io/badge/platform-Windows%2010%2F11-0078D4)](https://www.microsoft.com/windows)
-[![Release](https://img.shields.io/badge/release-v1.0.3-2563EB)](../../releases)
+[![Release](https://img.shields.io/badge/release-v1.0.5-2563EB)](../../releases)
 [![Python](https://img.shields.io/badge/python-3.9%2B-3776AB)](https://www.python.org/)
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
@@ -18,7 +18,7 @@
 
 ## 下载使用
 
-到 [Releases](../../releases) 页面下载 `campus-autologin-v1.0.3-win64.zip`，然后：
+到 [Releases](../../releases) 页面下载 `campus-autologin-v1.0.5-win64.zip`，然后：
 
 1. 解压到任意位置（**要解压整个文件夹，不能只拿 exe**）
 2. 双击 `启动.cmd`（推荐，可避开 Windows 智能控制的拦截）

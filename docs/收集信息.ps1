@@ -58,21 +58,51 @@ if (Test-Path $internal) {
     }
 }
 
+# 配置文件是否存在（v1.0.3 及更早，缺此文件会导致程序直接退出）
+$cfg = Join-Path $here 'config.ini'
+$cfgExample = Join-Path $here 'config.example.ini'
+Line ("config.ini    : " + (Test-Path $cfg))
+Line ("  config.example.ini : " + (Test-Path $cfgExample))
+if (Test-Path $cfg) {
+    $csize = (Get-Item $cfg).Length
+    Line ("  config.ini 大小    : " + $csize + ' 字节')
+    $cfgText = Get-Content $cfg -Raw -Encoding UTF8 -ErrorAction SilentlyContinue
+    if ($cfgText) {
+        if ($cfgText -match '(?m)^\s*username\s*=\s*\S+') {
+            Line '  账号已填写         : 是'
+        } else {
+            Line '  账号已填写         : 否（界面里还能再填）'
+        }
+    }
+}
+
 Section '三、来自网络标记（MOTW）'
 if (Test-Path $exe) {
     $z = Get-Item $exe -Stream Zone.Identifier -ErrorAction SilentlyContinue
     Line ("exe 带标记    : " + [bool]$z)
 }
+# 显式枚举全部文件再按扩展名过滤，避免 -Include 配 -Recurse 的边界问题。
+# 注意 onedir 包里真正的二进制只有 60 多个（其余是 tcl 脚本、编码表等），
+# 所以 60~70 个是正常值，不代表解压不完整。
 $marked = 0
 $checked = 0
-Get-ChildItem $here -Recurse -Include *.exe, *.dll, *.pyd -ErrorAction SilentlyContinue | ForEach-Object {
-    $checked++
-    if (Get-Item $_.FullName -Stream Zone.Identifier -ErrorAction SilentlyContinue) {
-        $marked++
+$totalFiles = 0
+Get-ChildItem -LiteralPath $here -Recurse -File -ErrorAction SilentlyContinue | ForEach-Object {
+    $totalFiles++
+    $ext = $_.Extension.ToLower()
+    if ($ext -in @('.exe', '.dll', '.pyd')) {
+        $checked++
+        if (Get-Item $_.FullName -Stream Zone.Identifier -ErrorAction SilentlyContinue) {
+            $marked++
+        }
     }
 }
-Line ("二进制文件数  : " + $checked)
+Line ("目录文件总数  : " + $totalFiles)
+Line ("二进制文件数  : " + $checked + "   （60~70 为正常）")
 Line ("带标记文件数  : " + $marked)
+if ($checked -gt 0 -and $checked -lt 100) {
+    Line '（提示：二进制文件数偏少，可能解压不完整）'
+}
 
 Section '四、历史日志'
 foreach ($f in @('startup-trace.log', 'startup-error.log', 'diagnose.txt', 'logs\auto_login.log')) {

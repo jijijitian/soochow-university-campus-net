@@ -44,7 +44,7 @@ import urllib.request
 from pathlib import Path
 
 APP_NAME = "校园网自动登录"
-APP_VERSION = "1.0.4"
+APP_VERSION = "1.0.5"
 
 
 def is_frozen() -> bool:
@@ -223,13 +223,111 @@ http://www.baidu.com|200|
 """
 
 
-def load_config(path: Path) -> Config:
-    cfg = Config()
-    if not path.is_file():
-        raise SystemExit(f"找不到配置文件：{path}")
+class ConfigMissingError(Exception):
+    """配置文件不存在且无法自动创建。"""
 
+    def __init__(self, path: Path) -> None:
+        self.path = path
+        super().__init__(f"找不到配置文件：{path}")
+
+
+class ConfigUnreadableError(Exception):
+    """配置文件存在但无法解析。"""
+
+    def __init__(self, path: Path, cause: Exception) -> None:
+        self.path = path
+        self.cause = cause
+        super().__init__(f"配置文件无法读取：{path}\n{cause}")
+
+
+DEFAULT_CONFIG_BODY = """\
+# ============================================================
+#  校园网自动登录配置
+#  首次启动时自动生成，请在程序界面里填写账号密码
+# ============================================================
+
+[account]
+# 校园网账号（统一身份认证的用户名，一般就是学号 / 工号）
+username =
+
+# 校园网密码（明文保存在本机，请勿把此文件发给别人）
+password =
+
+# 运营商后缀：校园网留空；中国联通 @cucc；中国电信 @ctc；中国移动 @zgyd
+suffix =
+
+# 账号前缀：登录页在 PC 端会自动给账号加 ",0,"，一般不用改
+prefix = ,0,
+
+# 本机 MAC 地址，留空 = 自动探测（推荐）
+mac =
+
+[portal]
+host = 10.9.1.3
+port = 801
+login_path = /eportal/?c=Portal&a=login
+login_method = 1
+js_version = 3.3.3
+timeout = 8
+
+[check]
+# 每轮检测的间隔（秒）
+interval = 300
+# 判定掉线前重复检测的轮数
+probe_rounds = 2
+probe_gap = 3
+timeout = 5
+
+[daemon]
+retry_delay = 30
+max_retry_delay = 600
+log_file = logs/auto_login.log
+log_max_bytes = 1048576
+log_backup_count = 3
+"""
+
+
+def ensure_config_file(path: Path) -> bool:
+    """确保配置文件存在。
+
+    优先复制同目录下的 config.example.ini（保留注释和默认值），
+    没有模板就写内置默认内容。返回是否成功创建/已存在。
+    """
+    if path.is_file():
+        return True
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        template = path.parent / "config.example.ini"
+        if template.is_file():
+            path.write_bytes(template.read_bytes())
+        else:
+            path.write_text(DEFAULT_CONFIG_BODY, encoding="utf-8")
+        return path.is_file()
+    except Exception:
+        return False
+
+
+def load_config(path: Path, create_if_missing: bool = True) -> Config:
+    """读取配置。
+
+    配置文件不存在时默认自动创建（优先复制 config.example.ini，
+    没有模板就用内置默认值生成），而不是直接退出。
+    首次运行必须能正常进入界面，否则用户根本没有填写账号的机会。
+
+    create_if_missing=False 时若文件缺失会抛 ConfigMissingError。
+    """
+    if not path.is_file():
+        if not create_if_missing:
+            raise ConfigMissingError(path)
+        if not ensure_config_file(path):
+            raise ConfigMissingError(path)
+
+    cfg = Config()
     parser = configparser.ConfigParser(interpolation=None)
-    parser.read(path, encoding="utf-8-sig")
+    try:
+        parser.read(path, encoding="utf-8-sig")
+    except Exception as exc:
+        raise ConfigUnreadableError(path, exc) from exc
 
     if parser.has_section("account"):
         sec = parser["account"]

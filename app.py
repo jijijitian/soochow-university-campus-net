@@ -215,7 +215,13 @@ def main() -> int:
 
         try:
             return core.main(argv)
-        except Exception:
+        except SystemExit as exc:
+            # argparse 的 --help / 参数错误会走这里，属于正常流程
+            code = exc.code if isinstance(exc.code, int) else 0
+            if startup_trace:
+                startup_trace.trace(f"命令行退出，返回 {code}")
+            return code
+        except BaseException:
             if startup_trace:
                 startup_trace.trace_exception("命令行模式异常")
             raise
@@ -230,7 +236,21 @@ def main() -> int:
         if startup_trace:
             startup_trace.trace(f"界面退出，返回 {code}")
         return code
-    except Exception:
+    except SystemExit as exc:
+        # 兜底：任何模块调用 sys.exit() 都不该让窗口静默消失
+        code = exc.code if isinstance(exc.code, int) else 1
+        detail = str(exc) or f"（退出码 {code}）"
+        if startup_trace:
+            startup_trace.trace(f"界面内触发 SystemExit：{detail}")
+        if code != 0:
+            return _fatal(
+                "启动失败",
+                f"程序在启动过程中主动退出。\n\n{detail}\n\n"
+                "如果提示缺少配置文件，请重新解压完整压缩包，"
+                "或在目录里放一份 config.ini。",
+            )
+        return 0
+    except BaseException:
         detail = traceback.format_exc()
         if startup_trace:
             startup_trace.trace(f"界面异常\n{detail}")
