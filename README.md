@@ -1,7 +1,7 @@
 # 校园网自动登录
 
 [![Platform](https://img.shields.io/badge/platform-Windows%2010%2F11-0078D4)](https://www.microsoft.com/windows)
-[![Release](https://img.shields.io/badge/release-v1.0.0-2563EB)](../../releases)
+[![Release](https://img.shields.io/badge/release-v1.0.1-2563EB)](../../releases)
 [![Python](https://img.shields.io/badge/python-3.9%2B-3776AB)](https://www.python.org/)
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
@@ -18,7 +18,7 @@
 
 ## 下载使用
 
-到 [Releases](../../releases) 页面下载 `campus-autologin-v1.0.0-win64.zip`，然后：
+到 [Releases](../../releases) 页面下载 `campus-autologin-v1.0.1-win64.zip`，然后：
 
 1. 解压到任意位置（**要解压整个文件夹，不能只拿 exe**）
 2. 双击 `校园网自动登录.exe`
@@ -98,6 +98,20 @@ python app.py -c 其他配置.ini  :: 指定其他配置文件
 
 如果请求被跳到 `10.9.1.3`，或返回了带 `eportal` / `dr.com` 字样的页面，就判定为
 「被劫持到登录页」= 掉线。连续两轮全失败才真正触发登录。
+
+### 确定本机 IP
+
+门户认证靠「IP + MAC」识别终端，所以提交的 `wlan_user_ip` 必须是对的。
+
+程序先问系统「访问 `10.9.1.3:801` 时用哪个源地址」，但**装了代理软件时这一步会拿到虚拟网卡地址**
+（例如 Clash 常用的 `198.18.0.1`），用它去登录会一直提示密码错误。
+
+所以现在会做过滤：
+
+- 排除 `198.18.0.0/15`（RFC 2544 基准测试网段，代理软件常占用）、`169.254/16`、`192.0.2/24`、`127/8`
+- 拿不到可信地址时，枚举所有网卡，优先选 `10.x` 网段的地址（校园网典型网段）
+
+登录失败时日志会写明实际提交的 IP，方便判断是不是取错了网卡。
 
 ### 登录门户
 

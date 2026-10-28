@@ -44,7 +44,7 @@ import urllib.request
 from pathlib import Path
 
 APP_NAME = "校园网自动登录"
-APP_VERSION = "1.0.0"
+APP_VERSION = "1.0.1"
 
 
 def is_frozen() -> bool:
@@ -368,26 +368,100 @@ def read_json(path: Path) -> dict:
         return {}
 
 
-def get_local_ip() -> str:
-    """取本机访问门户时使用的网卡地址（不会真的发包）。"""
-    for target in (("10.9.1.3", 80), ("223.5.5.5", 80), ("8.8.8.8", 53)):
-        sock = None
-        try:
-            sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-            sock.settimeout(1.0)
-            sock.connect(target)
-            ip = sock.getsockname()[0]
-            if ip and not ip.startswith("127.") and ip != "0.0.0.0":
-                return ip
-        except Exception:
-            continue
-        finally:
-            if sock is not None:
-                try:
-                    sock.close()
-                except Exception:
-                    pass
-    return ""
+def _is_virtual_ip(ip: str) -> bool:
+    """识别虚拟网卡 / 代理软件常用的保留地址，这类 IP 不能作为校园网身份。"""
+    if not ip:
+        return True
+    if ip.startswith("127.") or ip == "0.0.0.0":
+        return True
+    # 198.18.0.0/15 是 RFC 2544 基准测试网段，Clash / 迅游等代理常占用
+    try:
+        parts = [int(p) for p in ip.split(".")]
+    except Exception:
+        return True
+    if len(parts) != 4:
+        return True
+    a, b = parts[0], parts[1]
+    if a == 198 and b in (18, 19):
+        return True
+    # 169.254/16 链路本地，192.0.2/24 文档示例网段
+    if a == 169 and b == 254:
+        return True
+    if a == 192 and b == 0 and parts[2] == 2:
+        return True
+    return False
+
+
+def _candidate_ips() -> list[str]:
+    """列出所有网卡 IPv4，排除虚拟网卡，按可用性排序。"""
+    found: list[str] = []
+    try:
+        proc = subprocess.run(
+            ["ipconfig"],
+            capture_output=True,
+            timeout=15,
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+        )
+        raw = proc.stdout
+        for encoding in ("oem", "mbcs", "gb18030", "utf-8"):
+            try:
+                text = raw.decode(encoding)
+                break
+            except Exception:
+                continue
+        else:
+            text = raw.decode("latin-1", "ignore")
+        for line in text.splitlines():
+            match = re.search(r"(\d{1,3}(?:\.\d{1,3}){3})", line)
+            if match and ("IPv4" in line or "IP Address" in line or "IP 地址" in line):
+                ip = match.group(1)
+                if ip not in found:
+                    found.append(ip)
+    except Exception:
+        pass
+    return found
+
+
+def _portal_source_ip(host: str, port: int) -> str:
+    """到门户本身的路由会用哪个源地址——这才是门户看到的真实身份。"""
+    sock = None
+    try:
+        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        sock.settimeout(1.5)
+        sock.connect((host, port))
+        ip = sock.getsockname()[0]
+        return ip if ip and not ip.startswith("127.") else ""
+    except Exception:
+        return ""
+    finally:
+        if sock is not None:
+            try:
+                sock.close()
+            except Exception:
+                pass
+
+
+def get_local_ip(host: str = "10.9.1.3", port: int = 801) -> str:
+    """取本机在校园网中的真实 IP。
+
+    直接问系统「访问门户时用哪个源地址」最准；但装了代理 / 虚拟网卡时，
+    默认路由可能把门户流量也劫走，返回 198.18.x.x 之类的假地址。
+    这时退回枚举网卡，挑第一个非虚拟、看起来像校园内网的地址。
+    """
+    route_ip = _portal_source_ip(host, port)
+    if route_ip and not _is_virtual_ip(route_ip):
+        return route_ip
+
+    candidates = [ip for ip in _candidate_ips() if not _is_virtual_ip(ip)]
+    # 优先 10.x（校园网典型网段），其次其它私网地址
+    for ip in candidates:
+        if ip.startswith("10."):
+            return ip
+    if candidates:
+        return candidates[0]
+
+    # 实在没有可用的，退回路由给出的地址（总比空着好）
+    return route_ip
 
 
 _MAC_RE = re.compile(r"\b([0-9A-Fa-f]{2}(?:[-:][0-9A-Fa-f]{2}){5})\b")
@@ -677,7 +751,12 @@ def do_login(cfg: Config, local_ip: str, mac: str) -> tuple[bool, str]:
         detail = query_portal_error(cfg, local_ip, mac)
     if detail and detail not in reason:
         reason = f"{reason}：{detail}"
-    return False, f"登录失败，ret_code={ret_code}，{reason}"
+    # 认证被拒时把实际提交的 IP 一起报出来：装了代理/虚拟网卡时
+    # 常常是 IP 取错（例如 198.18.x.x），只看"密码错误"会误判
+    hint = ""
+    if code in (1, 4) and local_ip:
+        hint = f"（提交的 IP 为 {local_ip}，若本机装了代理或虚拟网卡请检查网卡地址）"
+    return False, f"登录失败，ret_code={ret_code}，{reason}{hint}"
 
 
 # --------------------------------------------------------------------------- #

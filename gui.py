@@ -533,6 +533,8 @@ class App(tk.Tk):
         self.title(APP_TITLE)
         self.geometry("1080x720")
         self.minsize(960, 660)
+        # 界面自身也要写日志：手动检测 / 登录都必须落盘
+        self._ensure_logging()
         self.dark = core.read_json(Path(core.APP_DIR) / "ui_state.json").get("dark", False)
         self.t = Theme.DARK if self.dark else Theme.LIGHT
 
@@ -572,6 +574,17 @@ class App(tk.Tk):
         self.protocol("WM_DELETE_WINDOW", self._on_close)
 
     # ------------------------------------------------------------------ 基础
+    @staticmethod
+    def _ensure_logging() -> None:
+        """确保 core.log 已挂上文件 handler（幂等）。"""
+        try:
+            if core.log.handlers:
+                return
+            cfg = core.load_config(CONFIG_PATH)
+            core.setup_logging(cfg, verbose=False)
+        except Exception:
+            pass
+
     def _apply_window_icon(self) -> None:
         ico = RES_DIR / "assets" / "app.ico"
         try:
@@ -1172,23 +1185,57 @@ class App(tk.Tk):
         threading.Thread(target=worker, daemon=True).start()
 
     def _task_check(self) -> None:
+        """手动检测：写日志；检测到掉线时自动登录（与守护进程行为一致）。"""
         cfg = core.load_config(CONFIG_PATH)
         online, detail = core.check_internet(cfg)
-        msg = f"{'已联网' if online else '未联网'}：{detail}"
-        self._post(self._toast, msg, "ok" if online else "bad")
+        core.log.info("手动检测：%s（%s）", "已联网" if online else "未联网", detail)
+
+        if online:
+            self._post(self._toast, f"已联网：{detail}", "ok")
+            return
+
+        core.log.warning("手动检测发现公网不可用，开始自动登录")
+        if not cfg.username or not cfg.password:
+            core.log.error("未填写账号或密码，无法自动登录")
+            self._post(self._toast, "未联网，且未填写账号密码", "warn")
+            return
+
+        ip = core.get_local_ip()
+        if not ip:
+            core.log.error("未能获取本机 IP，跳过登录")
+            self._post(self._toast, "未联网，且未能获取本机 IP", "bad")
+            return
+
+        mac = cfg.mac or core.get_mac(ip)
+        ok, msg = core.do_login(cfg, ip, mac)
+        if ok:
+            core.log.info("手动检测触发的登录成功：%s", msg)
+            self._post(self._toast, f"已自动登录：{msg}", "ok")
+        else:
+            core.log.error("手动检测触发的登录失败：%s", msg)
+            self._post(self._toast, f"登录失败：{msg}", "bad")
+        self._post(self._refresh_status)
 
     def _task_force_login(self) -> None:
         cfg = core.load_config(CONFIG_PATH)
         if not cfg.username or not cfg.password:
+            core.log.warning("手动登录被拒绝：未填写账号或密码")
             self._post(self._toast, "请先填写账号和密码", "warn")
             return
         ip = core.get_local_ip()
         if not ip:
+            core.log.error("手动登录失败：未能获取本机 IP")
             self._post(self._toast, "未能获取本机 IP", "bad")
             return
         mac = cfg.mac or core.get_mac(ip)
+        core.log.info("手动登录：本机 IP=%s，MAC=%s，账号=%s", ip, mac, core.build_account(cfg))
         ok, msg = core.do_login(cfg, ip, mac)
+        if ok:
+            core.log.info("手动登录成功：%s", msg)
+        else:
+            core.log.error("手动登录失败：%s", msg)
         self._post(self._toast, ("登录成功：" if ok else "登录失败：") + msg, "ok" if ok else "bad")
+        self._post(self._refresh_status)
 
     def _on_save(self, start_after: bool = False) -> None:
         values = self._collect()
@@ -1392,6 +1439,14 @@ class App(tk.Tk):
 
 
 def main() -> int:
+    # 界面自身也要写日志，否则手动检测 / 登录在黑窗用户那里看不到任何记录
+    try:
+        _cfg = core.load_config(CONFIG_PATH)
+        core.setup_logging(_cfg, verbose=False)
+        core.log.info("图形界面已启动（%s）", core.APP_DIR)
+    except Exception:
+        pass
+
     try:
         app = App()
     except Exception as exc:
@@ -1399,11 +1454,22 @@ def main() -> int:
 
         traceback.print_exc()
         try:
+            core.log.exception("界面启动失败")
+        except Exception:
+            pass
+        try:
             messagebox.showerror(APP_TITLE, f"界面启动失败：{exc}")
         except Exception:
             pass
         return 1
-    app.mainloop()
+
+    try:
+        app.mainloop()
+    finally:
+        try:
+            core.log.info("图形界面已关闭")
+        except Exception:
+            pass
     return 0
 
 
