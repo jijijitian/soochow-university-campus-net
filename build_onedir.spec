@@ -1,11 +1,9 @@
 # -*- mode: python ; coding: utf-8 -*-
-"""PyInstaller 打包配置（onedir + 控制台模式）。
+"""PyInstaller 打包配置（onedir + 窗口模式）。
 
-为什么用控制台模式：
-窗口模式（console=False）使用的 runw bootloader 在启动期出错时
-不会显示任何信息，用户看到的就是"双击没反应"。
-改成控制台模式后错误可以暴露，程序启动成功再由 console.hide_console()
-把窗口隐藏，使用体验不变。
+console=False：双击不会弹出黑色控制台窗口。
+启动期异常由 app.py 写入 startup-trace.log，并用原生 MessageBox 提示，
+不依赖控制台输出。
 """
 
 from pathlib import Path
@@ -25,8 +23,9 @@ a = Analysis(
         (str(ROOT / "gui.py"), "."),
         (str(ROOT / "motw.py"), "."),
         (str(ROOT / "console.py"), "."),
+        (str(ROOT / "startup_trace.py"), "."),
     ],
-    hiddenimports=["auto_login", "gui", "motw", "console"],
+    hiddenimports=["auto_login", "gui", "motw", "console", "startup_trace"],
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
@@ -49,7 +48,7 @@ exe = EXE(
     bootloader_ignore_signals=False,
     strip=False,
     upx=False,
-    console=True,          # 控制台模式：出错可见，启动后自行隐藏
+    console=False,         # 窗口模式：不弹黑色控制台
     disable_windowed_traceback=False,
     icon=str(ROOT / "assets" / "app.ico"),
     version=str(ROOT / "assets" / "version_info.txt"),
