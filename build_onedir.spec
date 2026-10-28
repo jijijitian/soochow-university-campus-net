@@ -2,8 +2,7 @@
 """PyInstaller 打包配置（onedir + 窗口模式）。
 
 console=False：双击不会弹出黑色控制台窗口。
-启动期异常由 app.py 写入 startup-trace.log，并用原生 MessageBox 提示，
-不依赖控制台输出。
+启动期异常由 app.py 用原生 MessageBox 提示并写 startup-error.log。
 """
 
 from pathlib import Path
@@ -23,9 +22,9 @@ a = Analysis(
         (str(ROOT / "gui.py"), "."),
         (str(ROOT / "motw.py"), "."),
         (str(ROOT / "console.py"), "."),
-        (str(ROOT / "startup_trace.py"), "."),
+        (str(ROOT / "tray.py"), "."),
     ],
-    hiddenimports=["auto_login", "gui", "motw", "console", "startup_trace"],
+    hiddenimports=["auto_login", "gui", "motw", "console", "tray"],
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],

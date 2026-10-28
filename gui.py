@@ -566,12 +566,17 @@ class App(tk.Tk):
         self.var_logins = tk.StringVar(value="0")
         self.var_next = tk.StringVar(value="—")
 
+        self._tray = None
+        self._tray_ready = False
+
         self._build()
         self._load_config()
         self._refresh_autostart()
         self._refresh_status()
+        self._start_tray()
         self._tick()
         self.protocol("WM_DELETE_WINDOW", self._on_close)
+        self.bind("<Unmap>", self._on_unmap)
 
     # ------------------------------------------------------------------ 基础
     @staticmethod
@@ -1409,24 +1414,162 @@ class App(tk.Tk):
         except Exception:
             pass
 
+    # ------------------------------------------------------------------ 托盘
+    def _tray_status(self) -> tuple[str, str]:
+        """供托盘菜单显示的状态文本。"""
+        try:
+            running = core.running_pid() is not None
+            if not running:
+                return "未运行", ""
+            state = core.read_json(core.STATE_FILE)
+            online = state.get("online")
+            label = "已联网" if online is True else ("未联网" if online is False else "检测中")
+            checks = state.get("checks", 0)
+            return label, f"检测 {checks} 次"
+        except Exception:
+            return "—", ""
+
+    def _start_tray(self) -> None:
+        """创建系统托盘图标。失败不影响主界面。"""
+        try:
+            import tray
+
+            icon = RES_DIR / "assets" / "app.ico"
+            self._tray = tray.TrayIcon(
+                icon_path=icon if icon.is_file() else None,
+                title=APP_TITLE,
+                callbacks={
+                    "show": lambda: self._invoke_ui(self._restore_window),
+                    "check": lambda: self._invoke_ui(
+                        lambda: self._run_task(self._task_check)
+                    ),
+                    "login": lambda: self._invoke_ui(
+                        lambda: self._run_task(self._task_force_login)
+                    ),
+                    "toggle": lambda: self._invoke_ui(self._toggle_daemon),
+                    "quit": lambda: self._invoke_ui(self._quit_from_tray),
+                },
+                status_provider=self._tray_status,
+            )
+            self._tray_ready = self._tray.start()
+            if not self._tray_ready:
+                core.log.warning(
+                    "托盘图标创建失败：%s", getattr(self._tray, "last_error", "未知原因")
+                )
+        except Exception as exc:
+            core.log.warning("托盘初始化异常：%s", exc)
+            self._tray_ready = False
+
+    def _invoke_ui(self, fn) -> None:
+        """从托盘线程安全地回到 Tk 主线程执行。"""
+        try:
+            self.after(0, fn)
+        except Exception:
+            pass
+
+    def _restore_window(self) -> None:
+        """从托盘恢复主窗口。"""
+        try:
+            self.deiconify()
+            self.lift()
+            self.attributes("-topmost", True)
+            self.after(120, lambda: self.attributes("-topmost", False))
+            self.focus_force()
+        except Exception:
+            pass
+
+    def _toggle_daemon(self) -> None:
+        """托盘菜单：启动 / 停止守护。"""
+        try:
+            if core.running_pid() is not None:
+                self._on_stop()
+            else:
+                self._on_start()
+            self._update_tray_tip()
+        except Exception:
+            pass
+
+    def _quit_from_tray(self) -> None:
+        """托盘菜单：退出程序。"""
+        try:
+            self._tray_stopping = True
+            self._on_close()
+        except Exception:
+            self.destroy()
+
+    def _update_tray_tip(self) -> None:
+        if self._tray and self._tray_ready:
+            try:
+                label, detail = self._tray_status()
+                text = f"{APP_TITLE} - {label}"
+                if detail:
+                    text += f"（{detail}）"
+                self._tray.update_tip(text)
+            except Exception:
+                pass
+
+    def _on_unmap(self, event) -> None:
+        """窗口最小化时隐藏到托盘。"""
+        try:
+            if event.widget is not self:
+                return
+            # iconic = 最小化
+            if self.state() == "iconic" and self._tray_ready:
+                self.withdraw()
+                self._update_tray_tip()
+                core.log.info("已最小化到系统托盘")
+        except Exception:
+            pass
+
     # ------------------------------------------------------------------ 心跳
     def _tick(self) -> None:
         try:
             self._drain()
             self._refresh_status()
+            self._update_tray_tip()
             if self._page == "logs":
                 self._reload_log()
         finally:
             self.after(1500, self._tick)
 
     def _on_close(self) -> None:
-        if core.running_pid() is not None:
+        # 有托盘时：点关闭按钮默认收进托盘，避免误退出
+        if self._tray_ready and not getattr(self, "_tray_stopping", False):
+            running = core.running_pid() is not None
+            try:
+                from tkinter import messagebox
+
+                choice = messagebox.askyesnocancel(
+                    APP_TITLE,
+                    "要退出程序，还是收到系统托盘继续后台运行？\n\n"
+                    "是：收进系统托盘（守护进程继续工作）\n"
+                    "否：完全退出程序\n"
+                    "取消：回到界面",
+                    parent=self,
+                )
+            except Exception:
+                choice = True
+            if choice is None:
+                return
+            if choice:
+                self.withdraw()
+                if self._tray:
+                    self._tray.notify(
+                        APP_TITLE,
+                        "已收进系统托盘，双击图标可以重新打开。",
+                        "info",
+                    )
+                core.log.info("窗口已收进系统托盘")
+                return
+            # 用户选择完全退出
+
+        if core.running_pid() is not None and not getattr(self, "_tray_stopping", False):
             from tkinter import messagebox
 
             keep = messagebox.askyesnocancel(
                 APP_TITLE,
                 "守护进程仍在后台运行。\n\n"
-                "是：让它继续运行（推荐，最小化到后台）\n"
+                "是：让它继续运行\n"
                 "否：停止它并退出\n"
                 "取消：回到界面",
                 parent=self,
@@ -1435,6 +1578,12 @@ class App(tk.Tk):
                 return
             if keep is False:
                 core.stop_daemon()
+
+        try:
+            if self._tray:
+                self._tray.stop()
+        except Exception:
+            pass
         self.destroy()
 
 
