@@ -44,7 +44,7 @@ import urllib.request
 from pathlib import Path
 
 APP_NAME = "校园网自动登录"
-APP_VERSION = "1.0.2"
+APP_VERSION = "1.0.3"
 
 
 def is_frozen() -> bool:

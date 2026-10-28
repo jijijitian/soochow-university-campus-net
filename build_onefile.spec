@@ -1,12 +1,14 @@
 # -*- mode: python ; coding: utf-8 -*-
-"""PyInstaller 打包配置。
+"""PyInstaller 打包配置（onefile 单文件版）。
 
-产物：dist/校园网自动登录.exe —— 单文件窗口程序，不需要 Python 环境。
+单文件的优势：不存在 _internal 目录，用户不可能"只解压了 exe"，
+也不会出现依赖文件被杀毒软件批量隔离的问题。
+
+注意：onefile 启动时会把依赖解压到临时目录，首次启动比 onedir 慢几秒。
 """
 
 from pathlib import Path
 
-block_cipher = None
 ROOT = Path(SPECPATH)
 
 a = Analysis(
@@ -20,8 +22,10 @@ a = Analysis(
         (str(ROOT / "config.example.ini"), "."),
         (str(ROOT / "auto_login.py"), "."),
         (str(ROOT / "gui.py"), "."),
+        (str(ROOT / "motw.py"), "."),
+        (str(ROOT / "console.py"), "."),
     ],
-    hiddenimports=["auto_login", "gui"],
+    hiddenimports=["auto_login", "gui", "motw", "console"],
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
@@ -29,13 +33,10 @@ a = Analysis(
         "numpy", "pandas", "matplotlib", "scipy", "PIL", "pytest",
         "setuptools", "pip", "wheel", "tests",
     ],
-    win_no_prefer_redirects=False,
-    win_private_assemblies=False,
-    cipher=block_cipher,
     noarchive=False,
 )
 
-pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
+pyz = PYZ(a.pure, a.zipped_data)
 
 exe = EXE(
     pyz,
@@ -51,12 +52,8 @@ exe = EXE(
     upx=False,
     upx_exclude=[],
     runtime_tmpdir=None,
-    console=False,            # 窗口程序，不显示控制台
+    console=False,
     disable_windowed_traceback=False,
-    argv_emulation=False,
-    target_arch=None,
-    codesign_identity=None,
-    entitlements_file=None,
     icon=str(ROOT / "assets" / "app.ico"),
     version=str(ROOT / "assets" / "version_info.txt"),
 )

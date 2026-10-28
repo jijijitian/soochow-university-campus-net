@@ -1,8 +1,11 @@
 # -*- mode: python ; coding: utf-8 -*-
-"""PyInstaller 打包配置（onedir 版）。
+"""PyInstaller 打包配置（onedir + 控制台模式）。
 
-生成 dist/校园网自动登录/ 目录，运行时不需要解压到临时目录，
-避免被系统临时目录权限限制。
+为什么用控制台模式：
+窗口模式（console=False）使用的 runw bootloader 在启动期出错时
+不会显示任何信息，用户看到的就是"双击没反应"。
+改成控制台模式后错误可以暴露，程序启动成功再由 console.hide_console()
+把窗口隐藏，使用体验不变。
 """
 
 from pathlib import Path
@@ -20,8 +23,10 @@ a = Analysis(
         (str(ROOT / "config.example.ini"), "."),
         (str(ROOT / "auto_login.py"), "."),
         (str(ROOT / "gui.py"), "."),
+        (str(ROOT / "motw.py"), "."),
+        (str(ROOT / "console.py"), "."),
     ],
-    hiddenimports=["auto_login", "gui"],
+    hiddenimports=["auto_login", "gui", "motw", "console"],
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
@@ -44,7 +49,7 @@ exe = EXE(
     bootloader_ignore_signals=False,
     strip=False,
     upx=False,
-    console=False,
+    console=True,          # 控制台模式：出错可见，启动后自行隐藏
     disable_windowed_traceback=False,
     icon=str(ROOT / "assets" / "app.ico"),
     version=str(ROOT / "assets" / "version_info.txt"),
