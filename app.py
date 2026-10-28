@@ -39,6 +39,14 @@ def _is_cli(argv: list[str]) -> bool:
 def main() -> int:
     argv = sys.argv[1:]
 
+    # 启动即清除「来自网络」标记，避免后续被智能控制 / SmartScreen 反复拦
+    try:
+        import motw
+
+        motw.self_heal()
+    except Exception:
+        pass
+
     if _is_cli(argv):
         import auto_login as core
 

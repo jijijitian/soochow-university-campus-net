@@ -1,7 +1,7 @@
 # 校园网自动登录
 
 [![Platform](https://img.shields.io/badge/platform-Windows%2010%2F11-0078D4)](https://www.microsoft.com/windows)
-[![Release](https://img.shields.io/badge/release-v1.0.1-2563EB)](../../releases)
+[![Release](https://img.shields.io/badge/release-v1.0.2-2563EB)](../../releases)
 [![Python](https://img.shields.io/badge/python-3.9%2B-3776AB)](https://www.python.org/)
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
@@ -18,10 +18,11 @@
 
 ## 下载使用
 
-到 [Releases](../../releases) 页面下载 `campus-autologin-v1.0.1-win64.zip`，然后：
+到 [Releases](../../releases) 页面下载 `campus-autologin-v1.0.2-win64.zip`，然后：
 
 1. 解压到任意位置（**要解压整个文件夹，不能只拿 exe**）
-2. 双击 `校园网自动登录.exe`
+2. 双击 `启动.cmd`（推荐，可避开 Windows 智能控制的拦截）
+   也可以直接双击 `校园网自动登录.exe`
 3. 填写账号、密码，选择运营商，设置检测间隔
 4. 点「保存并启动」
 
@@ -29,6 +30,23 @@
 
 > 程序会在 exe 旁边生成 `config.ini`（配置）、`status.json`（状态）和 `logs/`（日志）。
 > 卸载时先关闭开机自启，再删除整个文件夹即可。
+
+### 第一次运行被 Windows 拦住？
+
+Windows 11 的「智能控制」会拦截从网络下载的、没有数字签名的程序。本程序没有购买代码签名证书
+（个人开发者每年数千元），所以会触发这个机制。**这不是程序有问题**，所有未签名的个人作品都一样。
+
+按顺序试，任一成功即可：
+
+| 方法 | 做法 |
+|---|---|
+| **用启动器**（推荐） | 双击 `启动.cmd`，由 cmd 调用 exe，绕开拦截 |
+| 仍要运行 | 双击 exe → 拦截提示里点「更多信息」→「仍要运行」 |
+| 解除锁定 | 右键 exe → 属性 → 勾选「解除锁定」→ 确定 |
+| 关闭智能控制 | 设置 → 隐私和安全性 → Windows 安全中心 → 应用和浏览器控制 → 智能控制 |
+| 源码运行 | 装 Python 3.9+，执行 `python app.py` |
+
+详细说明见发布包内的 `被拦截怎么办.txt`。
 
 ---
 
